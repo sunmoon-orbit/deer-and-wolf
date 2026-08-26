@@ -2471,8 +2471,14 @@ function parseQuoteRecallLocation(c) {
 }
 
 function stripBilingualOuterBrackets(text) {
-  const s = String(text || '').trim()
-  if (s.length >= 2 && s.startsWith('[') && s.endsWith(']')) return s.slice(1, -1).trim()
+  let s = String(text || '').trim()
+  // Models occasionally combine the normal chat format with the bilingual
+  // example and return nested wrappers such as [[message]].  Bilingual
+  // brackets are transport syntax, not part of the visible message, so peel
+  // every redundant outer layer instead of leaving one pair in the bubble.
+  while (s.length >= 2 && s.startsWith('[') && s.endsWith(']')) {
+    s = s.slice(1, -1).trim()
+  }
   return s
 }
 
@@ -7824,7 +7830,7 @@ function buildSystemBilingualPart(bilingualSettings) {
 
 当前聊天已启用双语模式。原文语言：${sourceLabel}；翻译语言：${targetLabel}。当角色使用外语回复时，**必须且只能使用${sourceLabel}**，禁止使用${sourceLabel}以外的其他外语（例如英语）——除非角色人设另有明确母语设定。每条${sourceLabel}消息都必须在同一条消息内附带${targetLabel}翻译。
 
-普通外语文字消息必须严格使用格式：[{${sourceLabel}原文}「{${targetLabel}翻译}」]，例如：${example}。${targetLabel}翻译文本视为系统自翻译，不视为角色的原话；不要解释“设置”或询问“什么设置”。当你的角色想要说中文时，需要根据你的角色设定自行判断对于中文的熟悉程度来造句，并使用普通消息的标准格式：[{中文消息内容}]，此时不需要附带翻译。**外语语音消息**在双语模式下也须使用相同格式：[{${sourceLabel}原文}「{${targetLabel}翻译}」]，例如：${example}。中文语音消息可使用普通语音格式，不需要附带翻译。这条规则的优先级非常高，请务必遵守。
+普通外语文字消息必须严格使用格式：[{${sourceLabel}原文}「{${targetLabel}翻译}」]，例如：${example}。${targetLabel}翻译文本视为系统自翻译，不视为角色的原话；不要解释“设置”或询问“什么设置”。当你的角色想要说中文时，需要根据你的角色设定自行判断对于中文的熟悉程度来造句，并像普通聊天一样直接输出中文文字，**禁止在中文消息外添加方括号或其他包装符号**，此时不需要附带翻译。**外语语音消息**在双语模式下也须使用相同格式：[{${sourceLabel}原文}「{${targetLabel}翻译}」]，例如：${example}。中文语音消息可使用普通语音格式，不需要附带翻译。这条规则的优先级非常高，请务必遵守。
 
 ---
 
@@ -7861,7 +7867,7 @@ function buildBilingualCorrectionPrompt(bilingualSettings) {
   const cfg = normalizeChatBilingualSettings(bilingualSettings)
   const sourceLabel = getChatBilingualLangLabel(cfg.sourceLang)
   const targetLabel = getChatBilingualLangLabel(cfg.targetLang)
-  return `系统纠错：上一条 reply 没有遵守当前聊天已开启的双语模式。请重新输出同一个 JSON 对象结构。reply 字段中，外语普通文字消息和外语语音消息必须使用 [{${sourceLabel}原文}「{${targetLabel}翻译}」] 格式；如果角色按人设主动说中文，可以使用纯中文普通消息或中文语音消息，不需要翻译。禁止解释规则。`
+  return `系统纠错：上一条 reply 没有遵守当前聊天已开启的双语模式。请重新输出同一个 JSON 对象结构。reply 字段中，外语普通文字消息和外语语音消息必须使用 [{${sourceLabel}原文}「{${targetLabel}翻译}」] 格式；如果角色按人设主动说中文，必须直接输出纯中文普通消息或使用中文语音消息，不需要翻译，禁止在普通中文消息外添加方括号。禁止解释规则。`
 }
 
 function buildSystemMemoryPart(memoryCtx) {
