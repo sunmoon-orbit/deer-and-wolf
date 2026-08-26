@@ -16367,6 +16367,7 @@ function buildChatBackgroundSectionHTML(backgroundImage) {
 // 头像设置section（头像大小/圆角/显示）
 function buildAppearanceSectionHTML(rawAppearance) {
   const appearance = normalizeChatAppearance(rawAppearance)
+  const avatarIsCircle = appearance.avatarRadius >= Math.ceil(appearance.avatarSize / 2)
   return `
     <div class="cs-section" data-cs-tab="appearance">
       <div class="cs-section-label">头像设置</div>
@@ -16379,13 +16380,19 @@ function buildAppearanceSectionHTML(rawAppearance) {
         <input type="range" class="cs-slider" id="cs-avatar-size"
                min="30" max="50" step="1" value="${appearance.avatarSize}">
       </div>
-      <div class="cs-slider-row">
-        <div class="cs-slider-head">
-          <span>头像圆角</span>
-          <span class="cs-slider-value" id="cs-avatar-radius-val">${appearance.avatarRadius}px</span>
+      <div class="cs-avatar-shape-row">
+        <div class="cs-avatar-shape-head">头像形状</div>
+        <div class="cs-segmented cs-avatar-shape-options" role="radiogroup" aria-label="头像形状">
+          <label class="cs-segmented-option">
+            <input type="radio" name="cs-avatar-shape" value="square" ${avatarIsCircle ? '' : 'checked'}>
+            <span><i class="fa-regular fa-square"></i> 方形</span>
+          </label>
+          <label class="cs-segmented-option">
+            <input type="radio" name="cs-avatar-shape" value="circle" ${avatarIsCircle ? 'checked' : ''}>
+            <span><i class="fa-regular fa-circle"></i> 圆形</span>
+          </label>
         </div>
-        <input type="range" class="cs-slider" id="cs-avatar-radius"
-               min="0" max="40" step="1" value="${appearance.avatarRadius}">
+        <input type="hidden" id="cs-avatar-radius" value="${avatarIsCircle ? 40 : 4}">
       </div>
       <div class="cs-status-toggle-row">
         <span>隐藏我方头像</span>
@@ -17198,7 +17205,7 @@ function bindAppearanceEvents(settingsPage, chatId, chatPage) {
   const sizeInput   = settingsPage.querySelector('#cs-avatar-size')
   const sizeVal     = settingsPage.querySelector('#cs-avatar-size-val')
   const radiusInput = settingsPage.querySelector('#cs-avatar-radius')
-  const radiusVal   = settingsPage.querySelector('#cs-avatar-radius-val')
+  const shapeInputs = [...settingsPage.querySelectorAll('input[name="cs-avatar-shape"]')]
   const bgPreview   = settingsPage.querySelector('#cs-chat-bg-preview')
   const bgPick      = settingsPage.querySelector('#btn-cs-chat-bg-pick')
   const bgReset     = settingsPage.querySelector('#btn-cs-chat-bg-reset')
@@ -17222,10 +17229,11 @@ function bindAppearanceEvents(settingsPage, chatId, chatPage) {
     sizeVal.textContent = sizeInput.value + 'px'
     livePreview()
   })
-  radiusInput.addEventListener('input', () => {
-    radiusVal.textContent = radiusInput.value + 'px'
+  shapeInputs.forEach(input => input.addEventListener('change', () => {
+    if (!input.checked) return
+    radiusInput.value = input.value === 'circle' ? '40' : '4'
     livePreview()
-  })
+  }))
   if (bgPreview) bgPreview.addEventListener('click', pickBackground)
   if (bgPick) bgPick.addEventListener('click', pickBackground)
   if (bgReset) {

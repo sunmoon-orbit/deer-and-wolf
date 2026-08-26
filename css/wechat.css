@@ -4652,6 +4652,27 @@ html.has-android-bottom-inset .chat-input-bar {
 }
 .cs-appearance-preview .msg-avatar { flex-shrink: 0; }
 
+.cs-avatar-shape-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--c-border);
+}
+.cs-avatar-shape-head {
+  color: var(--c-text);
+  font-size: 14px;
+}
+.cs-avatar-shape-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.cs-avatar-shape-options .cs-segmented-option span {
+  gap: 6px;
+}
+.cs-avatar-shape-options .cs-segmented-option i {
+  font-size: 13px;
+}
+
 /* 时区设置 */
 .cs-tz-toggle-row {
   display: flex; align-items: center; justify-content: space-between; padding: 4px 0;
