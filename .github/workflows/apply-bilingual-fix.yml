@@ -1,0 +1,80 @@
+name: Apply bilingual bracket fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-bilingual-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply verified fix
+        shell: python
+        run: |
+          from pathlib import Path
+
+          wechat = Path("js/wechat.js")
+          text = wechat.read_text(encoding="utf-8")
+
+          replacements = [
+              (
+                  """function stripBilingualOuterBrackets(text) {
+  const s = String(text || '').trim()
+  if (s.length >= 2 && s.startsWith('[') && s.endsWith(']')) return s.slice(1, -1).trim()
+  return s
+}""",
+                  """function stripBilingualOuterBrackets(text) {
+  let s = String(text || '').trim()
+  // Models occasionally combine the normal chat format with the bilingual
+  // example and return nested wrappers such as [[message]].  Bilingual
+  // brackets are transport syntax, not part of the visible message, so peel
+  // every redundant outer layer instead of leaving one pair in the bubble.
+  while (s.length >= 2 && s.startsWith('[') && s.endsWith(']')) {
+    s = s.slice(1, -1).trim()
+  }
+  return s
+}"""
+              ),
+              (
+                  "当你的角色想要说中文时，需要根据你的角色设定自行判断对于中文的熟悉程度来造句，并使用普通消息的标准格式：[{中文消息内容}]，此时不需要附带翻译。",
+                  "当你的角色想要说中文时，需要根据你的角色设定自行判断对于中文的熟悉程度来造句，并像普通聊天一样直接输出中文文字，**禁止在中文消息外添加方括号或其他包装符号**，此时不需要附带翻译。"
+              ),
+              (
+                  "如果角色按人设主动说中文，可以使用纯中文普通消息或中文语音消息，不需要翻译。禁止解释规则。",
+                  "如果角色按人设主动说中文，必须直接输出纯中文普通消息或使用中文语音消息，不需要翻译，禁止在普通中文消息外添加方括号。禁止解释规则。"
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f"Expected source text not found: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+          wechat.write_text(text, encoding="utf-8")
+
+          index = Path("index.html")
+          html = index.read_text(encoding="utf-8")
+          old_version = "js/wechat.js?v=1.0.18"
+          new_version = "js/wechat.js?v=1.0.19"
+          if old_version not in html:
+              raise SystemExit("Expected cache version not found")
+          index.write_text(html.replace(old_version, new_version, 1), encoding="utf-8")
+      - name: Verify syntax and cleanup
+        run: |
+          node --check js/wechat.js
+          rm .github/workflows/apply-bilingual-fix.yml
+          git diff --check
+      - name: Publish fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html js/wechat.js .github/workflows/apply-bilingual-fix.yml
+          git commit -m "fix: remove leaked bilingual message brackets"
+          git push
