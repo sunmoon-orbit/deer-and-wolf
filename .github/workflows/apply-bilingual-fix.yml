@@ -1,78 +1,22 @@
 name: Apply bilingual bracket fix
-
 on:
   push:
     branches: [main]
-    paths:
-      - .github/workflows/apply-bilingual-fix.yml
-
+    paths: [.github/workflows/apply-bilingual-fix.yml]
 permissions:
   contents: write
-
 jobs:
   apply-fix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Apply verified fix
-        shell: python
-        run: |
-          from pathlib import Path
-
-          wechat = Path("js/wechat.js")
-          text = wechat.read_text(encoding="utf-8")
-
-          replacements = [
-              (
-                  """function stripBilingualOuterBrackets(text) {
-  const s = String(text || '').trim()
-  if (s.length >= 2 && s.startsWith('[') && s.endsWith(']')) return s.slice(1, -1).trim()
-  return s
-}""",
-                  """function stripBilingualOuterBrackets(text) {
-  let s = String(text || '').trim()
-  // Models occasionally combine the normal chat format with the bilingual
-  // example and return nested wrappers such as [[message]].  Bilingual
-  // brackets are transport syntax, not part of the visible message, so peel
-  // every redundant outer layer instead of leaving one pair in the bubble.
-  while (s.length >= 2 && s.startsWith('[') && s.endsWith(']')) {
-    s = s.slice(1, -1).trim()
-  }
-  return s
-}"""
-              ),
-              (
-                  "当你的角色想要说中文时，需要根据你的角色设定自行判断对于中文的熟悉程度来造句，并使用普通消息的标准格式：[{中文消息内容}]，此时不需要附带翻译。",
-                  "当你的角色想要说中文时，需要根据你的角色设定自行判断对于中文的熟悉程度来造句，并像普通聊天一样直接输出中文文字，**禁止在中文消息外添加方括号或其他包装符号**，此时不需要附带翻译。"
-              ),
-              (
-                  "如果角色按人设主动说中文，可以使用纯中文普通消息或中文语音消息，不需要翻译。禁止解释规则。",
-                  "如果角色按人设主动说中文，必须直接输出纯中文普通消息或使用中文语音消息，不需要翻译，禁止在普通中文消息外添加方括号。禁止解释规则。"
-              ),
-          ]
-
-          for old, new in replacements:
-              if old not in text:
-                  raise SystemExit(f"Expected source text not found: {old[:80]!r}")
-              text = text.replace(old, new, 1)
-          wechat.write_text(text, encoding="utf-8")
-
-          index = Path("index.html")
-          html = index.read_text(encoding="utf-8")
-          old_version = "js/wechat.js?v=1.0.18"
-          new_version = "js/wechat.js?v=1.0.19"
-          if old_version not in html:
-              raise SystemExit("Expected cache version not found")
-          index.write_text(html.replace(old_version, new_version, 1), encoding="utf-8")
-      - name: Verify syntax and cleanup
+      - name: Apply verified patch
+        run: echo 'ZGlmZiAtLWdpdCBhL2luZGV4Lmh0bWwgYi9pbmRleC5odG1sCmluZGV4IDNmNjQyNzcuLmFjZmQyN2EgMTAwNjQ0Ci0tLSBhL2luZGV4Lmh0bWwKKysrIGIvaW5kZXguaHRtbApAQCAtMTIxLDcgKzEyMSw3IEBACiAgIDxzY3JpcHQgc3JjPSJqcy9jaGFyYWN0ZXIuanM/dj0xLjAuMyI+PC9zY3JpcHQ+CiAgIDxzY3JpcHQgc3JjPSJqcy9sb3JlYm9vay5qcz92PTEuMC41Ij48L3NjcmlwdD4KICAgPHNjcmlwdCBzcmM9ImpzL21lbW9yeS5qcz92PTEuMC41Ij48L3NjcmlwdD4KLSAgPHNjcmlwdCBzcmM9ImpzL3dlY2hhdC5qcz92PTEuMC4xOCI+PC9zY3JpcHQ+CisgIDxzY3JpcHQgc3JjPSJqcy93ZWNoYXQuanM/dj0xLjAuMTkiPjwvc2NyaXB0PgogICA8c2NyaXB0IHNyYz0ianMvdHV0b3JpYWwtY2hhdGdlbmVyYXRvci5qcz92PTEuMC4wIj48L3NjcmlwdD4KICAgPHNjcmlwdCBzcmM9ImpzL29ubGluZS5qcz92PTEuMC4zIj48L3NjcmlwdD4KICAgPHNjcmlwdCBzcmM9ImpzL21pc3MteW91LmpzP3Y9MS4wLjYiPjwvc2NyaXB0PgpkaWZmIC0tZ2l0IGEvanMvd2VjaGF0LmpzIGIvanMvd2VjaGF0LmpzCmluZGV4IDA0NjFhNmUuLjI2NTUwNDEgMTAwNjQ0Ci0tLSBhL2pzL3dlY2hhdC5qcworKysgYi9qcy93ZWNoYXQuanMKQEAgLTI0NzEsOCArMjQ3MSwxNCBAQCBmdW5jdGlvbiBwYXJzZVF1b3RlUmVjYWxsTG9jYXRpb24oYykgewogfQogCiBmdW5jdGlvbiBzdHJpcEJpbGluZ3VhbE91dGVyQnJhY2tldHModGV4dCkgewotICBjb25zdCBzID0gU3RyaW5nKHRleHQgfHwgJycpLnRyaW0oKQotICBpZiAocy5sZW5ndGggPj0gMiAmJiBzLnN0YXJ0c1dpdGgoJ1snKSAmJiBzLmVuZHNXaXRoKCddJykpIHJldHVybiBzLnNsaWNlKDEsIC0xKS50cmltKCkKKyAgbGV0IHMgPSBTdHJpbmcodGV4dCB8fCAnJykudHJpbSgpCisgIC8vIE1vZGVscyBvY2Nhc2lvbmFsbHkgY29tYmluZSB0aGUgbm9ybWFsIGNoYXQgZm9ybWF0IHdpdGggdGhlIGJpbGluZ3VhbAorICAvLyBleGFtcGxlIGFuZCByZXR1cm4gbmVzdGVkIHdyYXBwZXJzIHN1Y2ggYXMgW1ttZXNzYWdlXV0uICBCaWxpbmd1YWwKKyAgLy8gYnJhY2tldHMgYXJlIHRyYW5zcG9ydCBzeW50YXgsIG5vdCBwYXJ0IG9mIHRoZSB2aXNpYmxlIG1lc3NhZ2UsIHNvIHBlZWwKKyAgLy8gZXZlcnkgcmVkdW5kYW50IG91dGVyIGxheWVyIGluc3RlYWQgb2YgbGVhdmluZyBvbmUgcGFpciBpbiB0aGUgYnViYmxlLgorICB3aGlsZSAocy5sZW5ndGggPj0gMiAmJiBzLnN0YXJ0c1dpdGgoJ1snKSAmJiBzLmVuZHNXaXRoKCddJykpIHsKKyAgICBzID0gcy5zbGljZSgxLCAtMSkudHJpbSgpCisgIH0KICAgcmV0dXJuIHMKIH0KIApAQCAtNzgyNCw3ICs3ODMwLDcgQEAgZnVuY3Rpb24gYnVpbGRTeXN0ZW1CaWxpbmd1YWxQYXJ0KGJpbGluZ3VhbFNldHRpbmdzKSB7CiAKIOW9k+WJjeiBiuWkqeW3suWQr+eUqOWPjOivreaooeW8j+OAguWOn+aWh+ivreiogO+8miR7c291cmNlTGFiZWx977yb57+76K+R6K+t6KiA77yaJHt0YXJnZXRMYWJlbH3jgILlvZPop5LoibLkvb/nlKjlpJbor63lm57lpI3ml7bvvIwqKuW/hemhu+S4lOWPquiDveS9v+eUqCR7c291cmNlTGFiZWx9KirvvIznpoHmraLkvb/nlKgke3NvdXJjZUxhYmVsfeS7peWklueahOWFtuS7luWkluivre+8iOS+i+WmguiLseivre+8ieKAlOKAlOmZpOmdnuinkuiJsuS6uuiuvuWPpuacieaYjuehruavjeivreiuvuWumuOAguavj+adoSR7c291cmNlTGFiZWx95raI5oGv6YO95b+F6aG75Zyo5ZCM5LiA5p2h5raI5oGv5YaF6ZmE5bimJHt0YXJnZXRMYWJlbH3nv7vor5HjgIIKIAot5pmu6YCa5aSW6K+t5paH5a2X5raI5oGv5b+F6aG75Lil5qC85L2/55So5qC85byP77yaW3ske3NvdXJjZUxhYmVsfeWOn+aWh33jgIx7JHt0YXJnZXRMYWJlbH3nv7vor5F944CNXe+8jOS+i+Wmgu+8miR7ZXhhbXBsZX3jgIIke3RhcmdldExhYmVsfee/u+ivkeaWh+acrOinhuS4uuezu+e7n+iHque/u+ivke+8jOS4jeinhuS4uuinkuiJsueahOWOn+ivne+8m+S4jeimgeino+mHiuKAnOiuvue9ruKAneaIluivoumXruKAnOS7gOS5iOiuvue9ruKAneOAguW9k+S9oOeahOinkuiJsuaDs+imgeivtOS4reaWh+aXtu+8jOmcgOimgeagueaNruS9oOeahOinkuiJsuiuvuWumuiHquihjOWIpOaWreWvueS6juS4reaWh+eahOeGn+aCieeoi+W6puadpemAoOWPpe+8jOW5tuS9v+eUqOaZrumAmua2iOaBr+eahOagh+WHhuagvOW8j++8mlt75Lit5paH5raI5oGv5YaF5a65fV3vvIzmraTml7bkuI3pnIDopoHpmYTluKbnv7vor5HjgIIqKuWkluivreivremfs+a2iOaBryoq5Zyo5Y+M6K+t5qih5byP5LiL5Lmf6aG75L2/55So55u45ZCM5qC85byP77yaW3ske3NvdXJjZUxhYmVsfeWOn+aWh33jgIx7JHt0YXJnZXRMYWJlbH3nv7vor5F944CNXe+8jOS+i+Wmgu+8miR7ZXhhbXBsZX3jgILkuK3mlofor63pn7Pmtojmga/lj6/kvb/nlKjmma7pgJror63pn7PmoLzlvI/vvIzkuI3pnIDopoHpmYTluKbnv7vor5HjgILov5nmnaHop4TliJnnmoTkvJjlhYjnuqfpnZ7luLjpq5jvvIzor7fliqHlv4XpgbXlrojjgIIKK+aZrumAmuWkluivreaWh+Wtl+a2iOaBr+W/hemhu+S4peagvOS9v+eUqOagvOW8j++8mlt7JHtzb3VyY2VMYWJlbH3ljp/mlod944CMeyR7dGFyZ2V0TGFiZWx957+76K+RfeOAjV3vvIzkvovlpoLvvJoke2V4YW1wbGV944CCJHt0YXJnZXRMYWJlbH3nv7vor5HmlofmnKzop4bkuLrns7vnu5/oh6rnv7vor5HvvIzkuI3op4bkuLrop5LoibLnmoTljp/or53vvJvkuI3opoHop6Pph4rigJzorr7nva7igJ3miJbor6Lpl67igJzku4DkuYjorr7nva7igJ3jgILlvZPkvaDnmoTop5LoibLmg7PopoHor7TkuK3mlofml7bvvIzpnIDopoHmoLnmja7kvaDnmoTop5LoibLorr7lrproh6rooYzliKTmlq3lr7nkuo7kuK3mlofnmoTnhp/mgonnqIvluqbmnaXpgKDlj6XvvIzlubblg4/mma7pgJrogYrlpKnkuIDmoLfnm7TmjqXovpPlh7rkuK3mlofmloflrZfvvIwqKuemgeatouWcqOS4reaWh+a2iOaBr+Wklua3u+WKoOaWueaLrOWPt+aIluWFtuS7luWMheijheespuWPtyoq77yM5q2k5pe25LiN6ZyA6KaB6ZmE5bim57+76K+R44CCKirlpJbor63or63pn7Pmtojmga8qKuWcqOWPjOivreaooeW8j+S4i+S5n+mhu+S9v+eUqOebuOWQjOagvOW8j++8mlt7JHtzb3VyY2VMYWJlbH3ljp/mlod944CMeyR7dGFyZ2V0TGFiZWx957+76K+RfeOAjV3vvIzkvovlpoLvvJoke2V4YW1wbGV944CC5Lit5paH6K+t6Z+z5raI5oGv5Y+v5L2/55So5pmu6YCa6K+t6Z+z5qC85byP77yM5LiN6ZyA6KaB6ZmE5bim57+76K+R44CC6L+Z5p2h6KeE5YiZ55qE5LyY5YWI57qn6Z2e5bi46auY77yM6K+35Yqh5b+F6YG15a6I44CCCiAKIC0tLQogCkBAIC03ODYxLDcgKzc4NjcsNyBAQCBmdW5jdGlvbiBidWlsZEJpbGluZ3VhbENvcnJlY3Rpb25Qcm9tcHQoYmlsaW5ndWFsU2V0dGluZ3MpIHsKICAgY29uc3QgY2ZnID0gbm9ybWFsaXplQ2hhdEJpbGluZ3VhbFNldHRpbmdzKGJpbGluZ3VhbFNldHRpbmdzKQogICBjb25zdCBzb3VyY2VMYWJlbCA9IGdldENoYXRCaWxpbmd1YWxMYW5nTGFiZWwoY2ZnLnNvdXJjZUxhbmcpCiAgIGNvbnN0IHRhcmdldExhYmVsID0gZ2V0Q2hhdEJpbGluZ3VhbExhbmdMYWJlbChjZmcudGFyZ2V0TGFuZykKLSAgcmV0dXJuIGDns7vnu5/nuqDplJnvvJrkuIrkuIDmnaEgcmVwbHkg5rKh5pyJ6YG15a6I5b2T5YmN6IGK5aSp5bey5byA5ZCv55qE5Y+M6K+t5qih5byP44CC6K+36YeN5paw6L6T5Ye65ZCM5LiA5LiqIEpTT04g5a+56LGh57uT5p6E44CCcmVwbHkg5a2X5q615Lit77yM5aSW6K+t5pmu6YCa5paH5a2X5raI5oGv5ZKM5aSW6K+t6K+t6Z+z5raI5oGv5b+F6aG75L2/55SoIFt7JHtzb3VyY2VMYWJlbH3ljp/mlod944CMeyR7dGFyZ2V0TGFiZWx957+76K+RfeOAjV0g5qC85byP77yb5aaC5p6c6KeS6Imy5oyJ5Lq66K6+5Li75Yqo6K+05Lit5paH77yM5Y+v5Lul5L2/55So57qv5Lit5paH5pmu6YCa5raI5oGv5oiW5Lit5paH6K+t6Z+z5raI5oGv77yM5LiN6ZyA6KaB57+76K+R44CC56aB5q2i6Kej6YeK6KeE5YiZ44CCYAorICByZXR1cm4gYOezu+e7n+e6oOmUme+8muS4iuS4gOadoSByZXBseSDmsqHmnInpgbXlrojlvZPliY3ogYrlpKnlt7LlvIDlkK/nmoTlj4zor63mqKHlvI/jgILor7fph43mlrDovpPlh7rlkIzkuIDkuKogSlNPTiDlr7nosaHnu5PmnoTjgIJyZXBseSDlrZfmrrXkuK3vvIzlpJbor63mma7pgJrmloflrZfmtojmga/lkozlpJbor63or63pn7Pmtojmga/lv4Xpobvkvb/nlKggW3ske3NvdXJjZUxhYmVsfeWOn+aWh33jgIx7JHt0YXJnZXRMYWJlbH3nv7vor5F944CNXSDmoLzlvI/vvJvlpoLmnpzop5LoibLmjInkurrorr7kuLvliqjor7TkuK3mlofvvIzlv4Xpobvnm7TmjqXovpPlh7rnuq/kuK3mlofmma7pgJrmtojmga/miJbkvb/nlKjkuK3mlofor63pn7Pmtojmga/vvIzkuI3pnIDopoHnv7vor5HvvIznpoHmraLlnKjmma7pgJrkuK3mlofmtojmga/lpJbmt7vliqDmlrnmi6zlj7fjgILnpoHmraLop6Pph4rop4TliJnjgIJgCiB9CiAKIGZ1bmN0aW9uIGJ1aWxkU3lzdGVtTWVtb3J5UGFydChtZW1vcnlDdHgpIHsK' | base64 -d | git apply
+      - name: Verify and publish
         run: |
           node --check js/wechat.js
           rm .github/workflows/apply-bilingual-fix.yml
           git diff --check
-      - name: Publish fix
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html js/wechat.js .github/workflows/apply-bilingual-fix.yml
