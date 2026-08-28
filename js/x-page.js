@@ -2,6 +2,7 @@
 
 var X_SESSION_UID_KEY = 'wanwan_x_uid'
 var X_PROFILE_PREFIX = 'wanwan_x_profile_'
+var X_POSTS_PREFIX = 'wanwan_x_posts_'
 
 window.showXPage = async function() {
   var user = await getXSessionUser()
@@ -39,7 +40,8 @@ function renderXPage(user) {
       '</div>' +
     '</div>' +
 
-    '<div class="x-feed">' +
+    '<div class="x-feed" data-x-view="home">' +
+      buildXOwnPostsHTML(user) +
       buildXPost({
         avatar: 'img/wanwan.png',
         name: '弯弯协会',
@@ -116,6 +118,7 @@ function renderXPage(user) {
     item.addEventListener('click', function() {
       items.forEach(function(i) { i.classList.remove('active') })
       item.classList.add('active')
+      renderXTab(page, item.dataset.tab, user)
     })
   })
 
@@ -314,6 +317,106 @@ function renderXCompose(user) {
       closeXCompose()
     })
   }
+
+  var input = page.querySelector('.x-compose-input')
+  var publishBtn = page.querySelector('.x-compose-publish')
+  function syncPublishState() {
+    var hasText = Boolean(String(input.innerText || '').trim())
+    publishBtn.disabled = !hasText
+    publishBtn.classList.toggle('is-ready', hasText)
+  }
+  input.addEventListener('input', syncPublishState)
+  publishBtn.addEventListener('click', function(e) {
+    e.preventDefault()
+    var content = String(input.innerText || '').trim()
+    if (!content || publishBtn.disabled) return
+    var posts = getXOwnPosts(user)
+    posts.unshift({ id: Date.now(), content: content, createdAt: Date.now() })
+    saveXOwnPosts(user, posts)
+    closeXCompose()
+    var xPage = document.getElementById('x-page')
+    if (xPage) renderXTab(xPage, 'home', user)
+    window.toast && window.toast('发布成功')
+  })
+  syncPublishState()
+}
+
+function getXOwnPosts(user) {
+  if (!user || user.id == null) return []
+  try {
+    var parsed = JSON.parse(localStorage.getItem(X_POSTS_PREFIX + user.id) || '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch (e) {
+    return []
+  }
+}
+
+function saveXOwnPosts(user, posts) {
+  if (!user || user.id == null) return
+  localStorage.setItem(X_POSTS_PREFIX + user.id, JSON.stringify(posts.slice(0, 100)))
+}
+
+function buildXOwnPostsHTML(user) {
+  return getXOwnPosts(user).map(function(post) {
+    return buildXPost({
+      avatar: user.avatar || '',
+      name: getXUserName(user),
+      handle: getXUserHandle(user),
+      time: formatXPostTime(post.createdAt),
+      content: post.content || '',
+      comments: 0,
+      retweets: 0,
+      likes: 0,
+      views: 0
+    })
+  }).join('')
+}
+
+function formatXPostTime(ts) {
+  var diff = Math.max(0, Date.now() - Number(ts || Date.now()))
+  if (diff < 60000) return '刚刚'
+  if (diff < 3600000) return Math.floor(diff / 60000) + '分钟'
+  if (diff < 86400000) return Math.floor(diff / 3600000) + '小时'
+  return Math.floor(diff / 86400000) + '天'
+}
+
+function renderXTab(page, tab, user) {
+  var feed = page.querySelector('.x-feed')
+  if (!feed) return
+  feed.dataset.xView = tab
+  page.querySelector('.x-fab').style.display = tab === 'home' ? '' : 'none'
+  if (tab === 'home') {
+    feed.innerHTML = buildXOwnPostsHTML(user) + buildXPost({
+      avatar: 'img/wanwan.png', name: '弯弯协会', verified: true,
+      handle: '@Wanwan_Offical', time: '2小时',
+      content: '产品上线请多多关注。#AI #Wanwan', comments: 847,
+      retweets: 203, likes: 3654, views: '28.6万'
+    })
+    bindXLikeButtons(feed)
+    return
+  }
+  var views = {
+    search: '<div class="x-secondary-view"><label class="x-search-box"><i class="fa fa-search"></i><input type="search" placeholder="搜索"></label><div class="x-secondary-title">试试搜索感兴趣的内容</div></div>',
+    notifications: '<div class="x-secondary-view"><div class="x-secondary-icon"><i class="fa-regular fa-bell"></i></div><div class="x-secondary-title">暂无通知</div><div class="x-secondary-copy">新的关注、喜欢和回复会出现在这里。</div></div>',
+    messages: '<div class="x-secondary-view"><div class="x-secondary-icon"><i class="fa-regular fa-envelope"></i></div><div class="x-secondary-title">欢迎来到私信</div><div class="x-secondary-copy">暂时还没有新的对话。</div></div>'
+  }
+  feed.innerHTML = views[tab] || views.search
+}
+
+function bindXLikeButtons(root) {
+  root.querySelectorAll('.x-post-action.like').forEach(function(button) {
+    button.addEventListener('click', function(e) {
+      e.preventDefault()
+      e.stopPropagation()
+      var liked = button.dataset.liked === '1'
+      var baseCount = Number(button.dataset.baseCount || button.dataset.count || 0)
+      var count = Math.max(baseCount, Number(button.dataset.count || baseCount) + (liked ? -1 : 1))
+      button.dataset.count = String(count)
+      button.dataset.liked = liked ? '0' : '1'
+      button.classList.toggle('liked', !liked)
+      button.innerHTML = getXHeartSvg(!liked) + '<span>' + formatXNumber(count) + '</span>'
+    })
+  })
 }
 
 function showXLoginPage(options) {
