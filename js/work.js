@@ -6,6 +6,7 @@
   var WALLET_DATA_PREFIX = 'wechat_wallet_'
   var HIRE_STATE_PREFIX = 'hire_state_'
   var CHAR_WORK_VALUES_PREFIX = 'char_work_values_'
+  var PART_TIME_EXP_MIGRATION_PREFIX = 'part_time_exp_migrated_'
 
   var PT_DURATION = 60 * 60 * 1000       // 1h
   var WP_DURATION = 8 * 60 * 60 * 1000   // 8h
@@ -55,10 +56,10 @@
     '- Format: { "results": [{ "index": 1, "dailyRMB": number, "dailyEXP": number }, ...] }'
 
   var PART_TIME_JOBS = [
-    { id: 'pt_store',    name: '便利店收银', icon: 'fa-store',      desc: '在便利店担任收银员', income: 20, duration: PT_DURATION },
-    { id: 'pt_delivery', name: '外卖骑手',   icon: 'fa-motorcycle', desc: '骑车配送外卖订单',   income: 20, duration: PT_DURATION },
-    { id: 'pt_cafe',     name: '咖啡店兼职', icon: 'fa-mug-hot',    desc: '在咖啡馆打工',       income: 20, duration: PT_DURATION },
-    { id: 'pt_library',  name: '图书馆整理', icon: 'fa-book',       desc: '整理馆藏图书',       income: 20, duration: PT_DURATION }
+    { id: 'pt_store',    name: '便利店收银', icon: 'fa-store',      desc: '在便利店担任收银员', income: 20, exp: 1, duration: PT_DURATION },
+    { id: 'pt_delivery', name: '外卖骑手',   icon: 'fa-motorcycle', desc: '骑车配送外卖订单',   income: 20, exp: 1, duration: PT_DURATION },
+    { id: 'pt_cafe',     name: '咖啡店兼职', icon: 'fa-mug-hot',    desc: '在咖啡馆打工',       income: 20, exp: 1, duration: PT_DURATION },
+    { id: 'pt_library',  name: '图书馆整理', icon: 'fa-book',       desc: '整理馆藏图书',       income: 20, exp: 1, duration: PT_DURATION }
   ]
 
   var WORKPLACE_JOBS = [
@@ -93,6 +94,25 @@
 
   async function saveWorkState(uid, state) {
     await db.config.put({ key: WORK_STATE_PREFIX + uid, value: state })
+  }
+
+  async function migratePartTimeExp(uid) {
+    var migrationKey = PART_TIME_EXP_MIGRATION_PREFIX + uid
+    if (await db.config.get(migrationKey)) return
+
+    var partTimeNames = {}
+    PART_TIME_JOBS.forEach(function(job) { partTimeNames[job.name + ' 工资'] = job.exp || 0 })
+    var rows = await db.finance.where('charId').equals(uid).toArray()
+    var missingExp = rows.reduce(function(total, row) {
+      return total + (partTimeNames[row.desc] || 0)
+    }, 0)
+
+    if (missingExp > 0) {
+      var state = await getWorkState(uid)
+      state.exp = (state.exp || 0) + missingExp
+      await saveWorkState(uid, state)
+    }
+    await db.config.put({ key: migrationKey, value: { migratedAt: Date.now(), restoredExp: missingExp } })
   }
 
   async function getWalletData(uid) {
@@ -317,6 +337,7 @@
           '<div class="work-job-meta">' +
             '<span class="meta-time"><i class="fa-regular fa-clock"></i> 1h</span>' +
             '<span class="meta-income"><i class="fa-solid fa-coins"></i> ¥' + job.income + '</span>' +
+            '<span class="meta-exp"><i class="fa-solid fa-star"></i> ' + job.exp + ' EXP</span>' +
           '</div>' +
         '</div>' +
         '<div class="work-job-btn">' + buildJobBtn(job, state) + '</div>' +
@@ -463,6 +484,7 @@
   // ===== 主入口 =====
   window.showWorkPage = async function(user) {
     var uid = user.id
+    await migratePartTimeExp(uid)
     var state = await getWorkState(uid)
     var walletData = await getWalletData(uid)
     var checkingBalance = walletData ? (walletData.checkingBalance || 0) : 0
@@ -806,7 +828,7 @@
           page.querySelector('#work-body').innerHTML = buildTabContent(currentTab, state, checkingBalance, totalAssets, hireState)
           bindActions()
 
-          window.toast('¥' + job.income.toFixed(2) + ' 已存入 Checking 账户！')
+          window.toast('¥' + job.income.toFixed(2) + ' + ' + (job.exp || 0) + ' EXP 已领取！')
         })
       })
 
