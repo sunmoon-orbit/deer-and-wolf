@@ -1052,9 +1052,11 @@ async function openPhonePrivacyPage(context) {
   const page = createPhoneAppPage('phone-app-privacy-page', '隐私空间')
   const scroll = page.querySelector('.phone-app-scroll')
 
+  const hasSnapshot = Boolean(snapshot?.data)
+  const privacyEmptyTitle = hasSnapshot ? '暂无观看数据' : '尚未生成｜请返回后在 Edit Phone 中选择隐私空间'
   const videosHtml = videos.length
     ? `<div class="phone-ph-card-list">${videos.map(buildPhonePrivacyVideoCardHTML).join('')}</div>`
-    : buildPhoneAppEmptyHTML('fa-regular fa-eye-slash', '暂无观看数据')
+    : buildPhoneAppEmptyHTML('fa-regular fa-eye-slash', privacyEmptyTitle)
 
   const searchesHtml = searches.length
     ? `
