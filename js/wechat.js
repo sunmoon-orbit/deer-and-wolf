@@ -924,7 +924,31 @@ async function syncRolePhoneFriendIds(ownerUid, charId) {
 }
 
 async function syncRolePhoneMessages(sourceChatId, targetChatId, targetCharId) {
-  const sourceMessages = await db.messages.where('chatId').equals(sourceChatId).sortBy('createdAt')
+  let sourceMessages = await db.messages.where('chatId').equals(sourceChatId).sortBy('createdAt')
+  const targetMessages = await db.messages.where('chatId').equals(targetChatId).sortBy('createdAt')
+  const sourceOperationIds = new Set(sourceMessages.map(message => String(message.clientMessageId || '')).filter(Boolean))
+
+  // 旧版本只做 source → target。先把角色手机里独有的消息救回真实会话，
+  // 再重建镜像，避免下次进入角色手机时覆盖掉尚未同步的内容。
+  const roleOnlyMessages = targetMessages.filter(message => {
+    const operationId = String(message.clientMessageId || '')
+    return operationId && !sourceOperationIds.has(operationId) &&
+      !operationId.startsWith('role-phone-mirror-')
+  })
+  if (roleOnlyMessages.length) {
+    const restored = roleOnlyMessages.map(message => {
+      const copy = { ...message }
+      delete copy.id
+      copy.chatId = sourceChatId
+      copy.charId = targetCharId
+      copy.role = message.role === 'user' ? 'assistant' : 'user'
+      copy.clientMessageId = `role-phone-backfill-${message.clientMessageId}`
+      return copy
+    })
+    await db.messages.bulkAdd(restored)
+    sourceMessages = await db.messages.where('chatId').equals(sourceChatId).sortBy('createdAt')
+  }
+
   await db.messages.where('chatId').equals(targetChatId).delete()
   if (!sourceMessages.length) return
   const mirrored = sourceMessages.map(message => {
