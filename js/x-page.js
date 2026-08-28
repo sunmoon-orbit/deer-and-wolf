@@ -3,6 +3,7 @@
 var X_SESSION_UID_KEY = 'wanwan_x_uid'
 var X_PROFILE_PREFIX = 'wanwan_x_profile_'
 var X_POSTS_PREFIX = 'wanwan_x_posts_'
+var X_COMMENT_GENERATING = false
 
 window.showXPage = async function() {
   var user = await getXSessionUser()
@@ -122,20 +123,7 @@ function renderXPage(user) {
     })
   })
 
-  var likeButtons = page.querySelectorAll('.x-post-action.like')
-  likeButtons.forEach(function(button) {
-    button.addEventListener('click', function(e) {
-      e.preventDefault()
-      e.stopPropagation()
-      var liked = button.dataset.liked === '1'
-      var baseCount = Number(button.dataset.baseCount || button.dataset.count || 0)
-      var count = Math.max(baseCount, Number(button.dataset.count || baseCount) + (liked ? -1 : 1))
-      button.dataset.count = String(count)
-      button.dataset.liked = liked ? '0' : '1'
-      button.classList.toggle('liked', !liked)
-      button.innerHTML = getXHeartSvg(!liked) + '<span>' + formatXNumber(count) + '</span>'
-    })
-  })
+  bindXPostInteractions(page, user)
 }
 
 async function showXProfilePage(user) {
@@ -359,12 +347,14 @@ function saveXOwnPosts(user, posts) {
 function buildXOwnPostsHTML(user) {
   return getXOwnPosts(user).map(function(post) {
     return buildXPost({
+      postId: post.id,
+      own: true,
       avatar: user.avatar || '',
       name: getXUserName(user),
       handle: getXUserHandle(user),
       time: formatXPostTime(post.createdAt),
       content: post.content || '',
-      comments: 0,
+      comments: Array.isArray(post.comments) ? post.comments.length : 0,
       retweets: 0,
       likes: 0,
       views: 0
@@ -392,7 +382,7 @@ function renderXTab(page, tab, user) {
       content: '产品上线请多多关注。#AI #Wanwan', comments: 847,
       retweets: 203, likes: 3654, views: '28.6万'
     })
-    bindXLikeButtons(feed)
+    bindXPostInteractions(feed, user)
     return
   }
   var views = {
@@ -767,7 +757,9 @@ function buildXPost(data) {
     ? '<img src="' + xEscape(data.avatar) + '" alt="">'
     : buildXDefaultAvatarHTML(data.name || '')
 
-  return '<div class="x-post">' +
+  var postAttrs = data.postId == null ? '' :
+    ' data-post-id="' + xEscape(data.postId) + '"' + (data.own ? ' data-own="1"' : '')
+  return '<div class="x-post"' + postAttrs + '>' +
     '<div class="x-post-avatar">' + avatarHTML + '</div>' +
     '<div class="x-post-body">' +
       '<div class="x-post-header">' +
@@ -777,7 +769,7 @@ function buildXPost(data) {
         '<span class="x-post-handle">' + xEscape(data.handle) + '</span>' +
         '<span class="x-post-dot">·</span>' +
         '<span class="x-post-time">' + xEscape(data.time) + '</span>' +
-        '<span class="x-post-more"><svg viewBox="0 0 24 24"><g><path d="M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"></path></g></svg></span>' +
+        '<button class="x-post-more" type="button"><svg viewBox="0 0 24 24"><g><path d="M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"></path></g></svg></button>' +
       '</div>' +
       '<div class="x-post-content">' + contentHTML + '</div>' +
       '<div class="x-post-actions">' +
@@ -791,6 +783,176 @@ function buildXPost(data) {
     '</div>' +
   '</div>'
 }
+
+
+function bindXPostInteractions(root, user) {
+  bindXLikeButtons(root)
+  root.querySelectorAll('.x-post[data-own="1"] .x-post-more').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault(); e.stopPropagation()
+      var row = btn.closest('.x-post')
+      if (row) showXPostActions(user, row.dataset.postId)
+    })
+  })
+  root.querySelectorAll('.x-post[data-own="1"] .x-post-action.comment').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault(); e.stopPropagation()
+      var row = btn.closest('.x-post')
+      if (row) showXComments(user, row.dataset.postId)
+    })
+  })
+}
+
+function findXOwnPost(user, postId) {
+  return getXOwnPosts(user).find(function(post) { return String(post.id) === String(postId) }) || null
+}
+
+function replaceXOwnPost(user, postId, nextPost) {
+  var posts = getXOwnPosts(user)
+  var index = posts.findIndex(function(post) { return String(post.id) === String(postId) })
+  if (index < 0) return false
+  posts[index] = nextPost
+  saveXOwnPosts(user, posts)
+  return true
+}
+
+function refreshXFeed(user) {
+  var page = document.getElementById('x-page')
+  if (page) renderXTab(page, 'home', user)
+}
+
+function removeXPopup() {
+  var popup = document.getElementById('x-popup')
+  if (popup) popup.remove()
+}
+
+function showXPostActions(user, postId) {
+  removeXPopup()
+  var popup = document.createElement('div')
+  popup.id = 'x-popup'
+  popup.className = 'x-popup'
+  popup.innerHTML =
+    '<button class="x-popup-bg" type="button"></button>' +
+    '<div class="x-popup-sheet">' +
+      '<button data-x-action="generate" type="button"><i class="fa-solid fa-wand-magic-sparkles"></i>生成评论</button>' +
+      '<button class="danger" data-x-action="delete" type="button"><i class="fa-regular fa-trash-can"></i>删除帖子</button>' +
+      '<button data-x-action="cancel" type="button">取消</button>' +
+    '</div>'
+  document.body.appendChild(popup)
+  popup.querySelector('.x-popup-bg').onclick = removeXPopup
+  popup.querySelector('[data-x-action="cancel"]').onclick = removeXPopup
+  popup.querySelector('[data-x-action="generate"]').onclick = function() {
+    removeXPopup(); generateXComments(user, postId)
+  }
+  popup.querySelector('[data-x-action="delete"]').onclick = function() {
+    if (!confirm('删除这条帖子？')) return
+    saveXOwnPosts(user, getXOwnPosts(user).filter(function(post) {
+      return String(post.id) !== String(postId)
+    }))
+    removeXPopup(); refreshXFeed(user)
+    if (window.toast) window.toast('帖子已删除')
+  }
+}
+
+function xCommentHTML(comment) {
+  var name = String(comment.name || '路人')
+  var avatar = comment.avatar
+    ? '<img src="' + xEscape(comment.avatar) + '" alt="">'
+    : buildXDefaultAvatarHTML(name)
+  return '<div class="x-comment-row">' +
+    '<div class="x-comment-avatar">' + avatar + '</div>' +
+    '<div class="x-comment-body"><b>' + xEscape(name) + '</b>' +
+    '<span>' + xEscape(comment.handle || '') + '</span>' +
+    '<p>' + formatXContent(comment.content || '') + '</p></div></div>'
+}
+
+function showXComments(user, postId) {
+  removeXPopup()
+  var post = findXOwnPost(user, postId)
+  if (!post) return
+  var comments = Array.isArray(post.comments) ? post.comments : []
+  var popup = document.createElement('div')
+  popup.id = 'x-popup'
+  popup.className = 'x-popup'
+  popup.innerHTML =
+    '<button class="x-popup-bg" type="button"></button>' +
+    '<div class="x-comments-sheet">' +
+      '<div class="x-comments-title"><b>评论</b><button type="button">×</button></div>' +
+      '<div class="x-comments-list">' +
+        (comments.length ? comments.map(xCommentHTML).join('') : '<div class="x-comments-empty">还没有评论</div>') +
+      '</div>' +
+      '<button class="x-generate-comments" type="button">' + (comments.length ? '继续生成评论' : '生成评论') + '</button>' +
+    '</div>'
+  document.body.appendChild(popup)
+  popup.querySelector('.x-popup-bg').onclick = removeXPopup
+  popup.querySelector('.x-comments-title button').onclick = removeXPopup
+  popup.querySelector('.x-generate-comments').onclick = function() {
+    removeXPopup(); generateXComments(user, postId)
+  }
+}
+
+function parseXCommentResult(raw) {
+  var text = String(raw || '').trim()
+  var start = text.indexOf('{')
+  var end = text.lastIndexOf('}')
+  if (start >= 0 && end > start) text = text.slice(start, end + 1)
+  return JSON.parse(text)
+}
+
+async function generateXComments(user, postId) {
+  if (X_COMMENT_GENERATING) return
+  var post = findXOwnPost(user, postId)
+  if (!post || !window.callAI) {
+    if (window.toast) window.toast('请先配置 AI')
+    return
+  }
+  X_COMMENT_GENERATING = true
+  if (window.toast) window.toast('正在生成评论…')
+  try {
+    var chars = (await db.characters.toArray()).filter(function(c) {
+      return c && c.type !== 'user' && String(c.id) !== String(user.id)
+    }).slice(0, 12)
+    var roster = chars.length ? chars.map(function(c) {
+      var rel = (c.relations || []).find(function(r) { return String(r.charId) === String(user.id) })
+      return '- ' + (c.nick || c.name || '未命名') + '；人设：' + (c.description || '未设定') +
+        '；关系：' + (rel ? rel.type + (rel.desc ? '，' + rel.desc : '') : '未设定')
+    }).join('\n') : '- 没有角色，可以生成自然路人'
+    var old = Array.isArray(post.comments) ? post.comments : []
+    var prompt = '请为虚构的X帖子生成3到6条短评论。\n' +
+      '发帖人：' + getXUserName(user) + '，禁止让发帖人自己评论。\n' +
+      '帖子：' + String(post.content || '') + '\n' +
+      '优先从以下角色中选择评论者，语气符合人设和关系：\n' + roster + '\n' +
+      (old.length ? '已有评论，不要重复：\n' + old.map(function(x) { return x.name + '：' + x.content }).join('\n') + '\n' : '') +
+      '只输出JSON：{"comments":[{"name":"昵称","handle":"@账号","content":"评论"}]}'
+    var raw = await window.callAI([{ role: 'user', content: prompt }], { temperature: 0.9 })
+    var parsed = parseXCommentResult(raw)
+    var items = Array.isArray(parsed.comments) ? parsed.comments : []
+    var avatars = {}
+    chars.forEach(function(c) { avatars[String(c.nick || c.name || '')] = c.avatar || '' })
+    var fresh = items.slice(0, 8).map(function(item) {
+      var name = String(item.name || item.author || '路人').trim()
+      return {
+        id: Date.now() + Math.random(),
+        name: name,
+        handle: String(item.handle || '').trim() || '@' + name.replace(/\s+/g, '').toLowerCase(),
+        content: String(item.content || item.text || '').trim(),
+        avatar: avatars[name] || ''
+      }
+    }).filter(function(item) { return item.content })
+    if (!fresh.length) throw new Error('AI没有返回可用评论')
+    post.comments = old.concat(fresh)
+    replaceXOwnPost(user, postId, post)
+    refreshXFeed(user)
+    showXComments(user, postId)
+    if (window.toast) window.toast('评论已生成')
+  } catch (e) {
+    console.error('生成X评论失败', e)
+    if (window.toast) window.toast('生成评论失败：' + (e.message || '未知错误'))
+  } finally {
+    X_COMMENT_GENERATING = false
+  }
+}
+
 
 function buildXBottomBar() {
   var items = [
