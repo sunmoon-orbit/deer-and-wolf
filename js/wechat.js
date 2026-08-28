@@ -5640,6 +5640,7 @@ async function addUserMsg(chatPage, content, createdAt, extra = null) {
     })
   }
   const localMessageId = await addPrivateMessageIdempotently(msg)
+  await mirrorRolePhoneMessageToOwnerChat(msg)
   clearPrivateReplyVersions(chatId)
   if (isOnlineFriend) {
     try {
@@ -5658,6 +5659,29 @@ async function addUserMsg(chatPage, content, createdAt, extra = null) {
     }
   }
   return localMessageId
+}
+
+async function mirrorRolePhoneMessageToOwnerChat(message) {
+  const session = _wechatRolePhoneSession
+  if (!session?.ownerUid || !session?.charId || !message) return
+  if (Number(_wechatUid) !== Number(session.charId)) return
+  if (Number(message.charId) !== Number(session.ownerUid)) return
+
+  const ownerChat = await db.chats
+    .where('[ownerUid+charId]').equals([session.ownerUid, session.charId])
+    .first()
+  if (!ownerChat?.id) return
+
+  const mirrored = { ...message }
+  delete mirrored.id
+  mirrored.chatId = ownerChat.id
+  mirrored.charId = session.charId
+  mirrored.role = message.role === 'user' ? 'assistant' : 'user'
+  mirrored.clientMessageId = `role-phone-mirror-${message.clientMessageId || createPrivateMessageOperationId(ownerChat.id, mirrored.role)}`
+
+  const existing = await db.messages.where('clientMessageId').equals(mirrored.clientMessageId).first()
+  if (!existing) await addPrivateMessageIdempotently(mirrored)
+  await db.chats.update(ownerChat.id, { unread: 1 })
 }
 
 function getOnlineMessageType(message) {
