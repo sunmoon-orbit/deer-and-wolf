@@ -661,12 +661,21 @@ function bindPhoneHomeEvents(overlay) {
 
   overlay.querySelectorAll('.phone-home-app').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (btn.dataset.phoneApp === 'iscreens') {
+      const appId = btn.dataset.phoneApp
+      if (appId === 'iscreens') {
         showPhoneIScreenPage(overlay, overlay._phoneContext)
-      } else if (btn.dataset.phoneApp === 'wechat') {
+      } else if (appId === 'wechat') {
         window.showWechatRolePhonePage?.(overlay._phoneContext)
-      } else if (window.PHONE_GEN_APP_LABELS?.[btn.dataset.phoneApp]) {
-        window.openPhoneAppPage?.(btn.dataset.phoneApp, overlay._phoneContext)
+      } else if (appId === 'wallet') {
+        window.openRolePhoneWalletPage?.(overlay._phoneContext)
+      } else if (appId === 'x') {
+        window.showXPage?.()
+      } else if (appId === 'instagram') {
+        window.showIGPage?.()
+      } else if (appId === 'message') {
+        window.showMessagePage?.()
+      } else if (window.PHONE_GEN_APP_LABELS?.[appId]) {
+        window.openPhoneAppPage?.(appId, overlay._phoneContext)
       } else {
         window.toast?.('功能暂未开放')
       }
