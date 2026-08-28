@@ -630,12 +630,12 @@ ${MISS_BEAUTY_CLASS_TEXT}`
           <i class="fa-solid fa-location-dot"></i>
           <span>见面</span>
         </button>
-        <button class="miss-mode-card miss-mode-card-disabled" data-mode="script" aria-disabled="true" tabindex="-1">
+        <button class="miss-mode-card" data-mode="script">
           <i class="fa-solid fa-book-open"></i>
           <span>剧本</span>
         </button>
       </div>`
-    body.querySelectorAll('.miss-mode-card:not([data-mode="script"])').forEach(btn => {
+    body.querySelectorAll('.miss-mode-card').forEach(btn => {
       btn.addEventListener('click', () => renderOfflineChat(page, ownerUid, chat, btn.dataset.mode))
     })
   }
