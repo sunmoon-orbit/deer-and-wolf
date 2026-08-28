@@ -184,7 +184,54 @@ function bindSmsListEvents(page) {
   }
 
   page.querySelector('#imessage-new-btn').addEventListener('click', function() {
-    window.toast && window.toast('暂不支持新建短信')
+    openSmsCompose(page)
+  })
+}
+
+function openSmsCompose(listPage) {
+  document.getElementById('imessage-compose-page')?.remove()
+  var page = document.createElement('div')
+  page.id = 'imessage-compose-page'
+  page.className = 'full-page imessage-main imessage-compose'
+  page.innerHTML =
+    '<div class="imessage-header">' +
+      '<button class="imessage-back" id="imessage-compose-back"><i class="fa fa-angle-left"></i></button>' +
+      '<span class="imessage-phone-title">新信息</span><span style="width:32px"></span>' +
+    '</div>' +
+    '<div class="imessage-compose-body">' +
+      '<label class="imessage-compose-row"><span>收件人：</span><input id="imessage-compose-phone" inputmode="tel" placeholder="手机号或名称"></label>' +
+      '<label class="imessage-compose-row"><span>名称：</span><input id="imessage-compose-name" placeholder="选填"></label>' +
+      '<textarea id="imessage-compose-text" placeholder="短信"></textarea>' +
+      '<button class="btn-pill imessage-compose-send" id="imessage-compose-send" disabled>发送</button>' +
+    '</div>'
+  window.openPage(page)
+  var phoneInput = page.querySelector('#imessage-compose-phone')
+  var textInput = page.querySelector('#imessage-compose-text')
+  var sendBtn = page.querySelector('#imessage-compose-send')
+  function sync() {
+    sendBtn.disabled = !phoneInput.value.trim() || !textInput.value.trim()
+  }
+  phoneInput.addEventListener('input', sync)
+  textInput.addEventListener('input', sync)
+  page.querySelector('#imessage-compose-back').addEventListener('click', function() {
+    window.closePage('imessage-compose-page')
+  })
+  sendBtn.addEventListener('click', async function() {
+    if (sendBtn.disabled) return
+    var remotePhone = phoneInput.value.trim()
+    var body = textInput.value.trim()
+    var now = Date.now()
+    var conv = await db.smsConversations.where('[ownerPhone+remotePhone]').equals([_smsActivePhone, remotePhone]).first()
+    var convId = conv && conv.id
+    if (convId) {
+      await db.smsConversations.update(convId, { remoteName: page.querySelector('#imessage-compose-name').value.trim() || conv.remoteName || '', lastMessage: body, lastMessageAt: now, updatedAt: now })
+    } else {
+      convId = await db.smsConversations.add({ ownerPhone: _smsActivePhone, remotePhone: remotePhone, remoteName: page.querySelector('#imessage-compose-name').value.trim(), remoteAvatar: SMS_DEFAULT_AVATAR, lastMessage: body, lastMessageAt: now, unreadCount: 0, updatedAt: now })
+    }
+    await db.smsMessages.add({ conversationId: convId, direction: 'out', body: body, createdAt: now, read: true })
+    window.closePage('imessage-compose-page')
+    await loadSmsConversations(listPage)
+    openSmsChat(convId, listPage)
   })
 }
 
@@ -258,6 +305,25 @@ async function openSmsChat(conversationId, listPage) {
 
   window.openPage(page)
   await loadSmsChatMessages(page, conversationId)
+
+  var input = page.querySelector('#imessage-chat-input-field')
+  var send = page.querySelector('#imessage-send-btn')
+  function syncSend() { send.classList.toggle('active', Boolean(input.value.trim())) }
+  async function sendMessage() {
+    var body = input.value.trim()
+    if (!body) return
+    var now = Date.now()
+    await db.smsMessages.add({ conversationId: conversationId, direction: 'out', body: body, createdAt: now, read: true })
+    await db.smsConversations.update(conversationId, { lastMessage: body, lastMessageAt: now, updatedAt: now })
+    input.value = ''
+    syncSend()
+    await loadSmsChatMessages(page, conversationId)
+  }
+  input.addEventListener('input', syncSend)
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  })
+  send.addEventListener('click', sendMessage)
 
   if (conv.unreadCount > 0) {
     await db.smsConversations.update(conversationId, { unreadCount: 0 })
