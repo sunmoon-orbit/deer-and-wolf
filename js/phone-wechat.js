@@ -130,17 +130,116 @@ async function getPhoneSnapshotTemperature() {
   return 0.5
 }
 
-function extractPhoneSnapshotJson(text) {
-  const raw = String(text || '').trim()
-  if (!raw) return null
-  try { return JSON.parse(raw) } catch (_) {}
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fenced) {
-    try { return JSON.parse(fenced[1].trim()) } catch (_) {}
+function extractPhoneSnapshotJson(payload) {
+  const unwrapObject = value => {
+    if (!value || typeof value !== 'object') return value
+    if (Array.isArray(value)) {
+      const textParts = value
+        .map(item => item?.text ?? item?.content ?? item?.value ?? '')
+        .filter(part => typeof part === 'string' && part.trim())
+      return textParts.length ? textParts.join('\n') : value
+    }
+    const finalKeys = ['friends', 'chats', 'moments', 'wallet', 'searches', 'bookmarks', 'notes', 'albums', 'games', 'videos', 'emails']
+    if (finalKeys.some(key => Object.prototype.hasOwnProperty.call(value, key))) return value
+    return value.output_text ??
+      value.choices?.[0]?.message?.content ??
+      value.choices?.[0]?.text ??
+      value.message?.content ??
+      value.message ??
+      value.content ??
+      value.text ??
+      value.output?.[0]?.content ??
+      value.response ??
+      value.data ??
+      value
   }
-  const braced = raw.match(/\{[\s\S]*\}/)
-  if (braced) {
-    try { return JSON.parse(braced[0]) } catch (_) {}
+
+  const escapeControlCharsInStrings = source => {
+    let result = ''
+    let inString = false
+    let escaped = false
+    for (const ch of source) {
+      if (inString && !escaped && (ch === '\n' || ch === '\r' || ch === '\t')) {
+        result += ch === '\n' ? '\\n' : ch === '\r' ? '\\r' : '\\t'
+        continue
+      }
+      result += ch
+      if (ch === '"' && !escaped) inString = !inString
+      if (ch === '\\' && !escaped) escaped = true
+      else escaped = false
+    }
+    return result
+  }
+
+  const parseCandidate = candidate => {
+    if (candidate && typeof candidate === 'object') return unwrapObject(candidate)
+    let source = String(candidate ?? '').replace(/^\uFEFF/, '').trim()
+    if (!source) return null
+    for (let depth = 0; depth < 3; depth++) {
+      try {
+        const parsed = JSON.parse(source)
+        if (typeof parsed === 'string') {
+          source = parsed.trim()
+          continue
+        }
+        return unwrapObject(parsed)
+      } catch (_) {}
+      break
+    }
+    const repaired = escapeControlCharsInStrings(source).replace(/,\s*([}\]])/g, '$1')
+    if (repaired !== source) {
+      try { return unwrapObject(JSON.parse(repaired)) } catch (_) {}
+    }
+    return null
+  }
+
+  let value = unwrapObject(payload)
+  for (let depth = 0; depth < 4; depth++) {
+    if (value && typeof value === 'object') {
+      const unwrapped = unwrapObject(value)
+      if (unwrapped === value) return value
+      value = unwrapped
+      continue
+    }
+    break
+  }
+
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+  const direct = parseCandidate(raw)
+  if (direct && typeof direct === 'object') return direct
+
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fenced) {
+    const parsed = parseCandidate(fenced[1])
+    if (parsed && typeof parsed === 'object') return parsed
+  }
+
+  // 从解释文字中提取第一个配平的 JSON 对象，避免贪婪正则吞掉尾注。
+  let start = -1
+  let level = 0
+  let inString = false
+  let escaped = false
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+    if (start < 0) {
+      if (ch !== '{') continue
+      start = i
+      level = 1
+      continue
+    }
+    if (ch === '"' && !escaped) inString = !inString
+    if (!inString) {
+      if (ch === '{') level++
+      else if (ch === '}') level--
+      if (level === 0) {
+        const parsed = parseCandidate(raw.slice(start, i + 1))
+        if (parsed && typeof parsed === 'object') return parsed
+        start = -1
+      }
+    }
+    if (ch === '\\' && !escaped) escaped = true
+    else escaped = false
   }
   return null
 }
