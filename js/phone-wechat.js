@@ -657,12 +657,28 @@ function buildPhoneWalletBillRowsHTML(bills, userName) {
 async function openRolePhoneWalletPage(session) {
   if (!session?.ownerUid || !session?.charId) return
   const snapshot = await getPhoneWechatSnapshot(session.ownerUid, session.charId)
-  const wallet = snapshot?.data?.wallet
-  if (!wallet || wallet.balance == null) {
+  if (!snapshot?.data) {
     window.toast?.('暂无钱包数据，请先在查看记录中 Edit Phone 生成微信内容')
     return
   }
   const char = await db.characters.get(session.charId)
+  const wallet = { ...(snapshot.data.wallet || {}) }
+  let repaired = false
+  ;['balance', 'checkingBalance', 'savingBalance'].forEach(key => {
+    if (wallet[key] == null || !Number.isFinite(Number(wallet[key]))) {
+      wallet[key] = 0
+      repaired = true
+    }
+  })
+  if (!wallet.savingCardNumber || !wallet.checkingCardNumber) {
+    await ensurePhoneSnapshotWalletCards(char, wallet, wallet)
+    repaired = true
+  }
+  if (repaired) {
+    snapshot.data.wallet = wallet
+    snapshot.updatedAt = Date.now()
+    await savePhoneWechatSnapshot(session.ownerUid, session.charId, snapshot)
+  }
   const user = await db.characters.get(session.ownerUid)
   const userName = user?.nick || user?.name || '用户'
   const bills = await extractPhoneWalletBills(session.ownerUid, session.charId)
